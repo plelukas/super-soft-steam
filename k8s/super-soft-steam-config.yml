@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: super-soft-steam-master-config
+data:
+  WSS_THROTTLE_ELEMENTS: "1"
+  WSS_THROTTLE_SECONDS: "1s"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: super-soft-steam-worker-config
+data:
+  TOPIC: "identified-tracker-v3"
+  KAFKA_POLL_INTERVAL: "1s"
+  KAFKA_GROUP_ID: "super-soft-steam-hackathon"
+  KAFKA_BROKERS: "172.26.11.10:9092,172.26.11.6:9092,172.26.11.12:9092,172.26.11.11:9092,172.26.11.4:9092,172.26.11.9:9092,172.26.11.13:9092,172.26.11.8:9092,172.26.11.7:9092"

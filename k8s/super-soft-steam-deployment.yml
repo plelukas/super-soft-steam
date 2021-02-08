@@ -1,0 +1,191 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name:  super-soft-steam-cluster
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: super-soft-steam-cluster
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "watch", "list"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: super-soft-steam-cluster
+subjects:
+  - kind: ServiceAccount
+    name:  super-soft-steam-cluster
+    namespace: staging1
+roleRef:
+  kind: Role
+  name: super-soft-steam-cluster
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: super-soft-steam-master
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    external-dns.alpha.kubernetes.io/hostname: super-soft-steam-master.$DNS_SUFFIX
+spec:
+  ports:
+    - name: api
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: super-soft-steam-master
+    tier: api
+  type: LoadBalancer
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: super-soft-steam-master
+    tier: api
+    cluster: super-soft-steam-cluster
+  name: super-soft-steam-master
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: super-soft-steam-master
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: super-soft-steam-master
+        tier: api
+        cluster: super-soft-steam-cluster
+        actorSystemName: super-soft-steam-cluster
+      annotations:
+        synerise.com/deployment.date: "$DEPLOYMENT_DATE"
+        synerise.com/deployment.author: "$USERNAME"
+        synerise.com/deployment.stevedore-branch: "$STEVE_BRANCH"
+        synerise.com/deployment.app-version: "$IMAGE_TAG"
+        synerise.com/deployment.canonical-name: "$APPLICATION"
+        synerise.com/deployment.singleton: "false"
+        synerise.com/deployment.on-prem: "false"
+    spec:
+      imagePullSecrets:
+        - name: synerise-deployer-pull-secret
+      serviceAccountName: super-soft-steam-cluster
+      containers:
+        - name: super-soft-steam-master
+          image: $DOCKER_REGISTRY/synerise/super-soft-steam-master:$IMAGE_TAG
+          imagePullPolicy: Always
+          env:
+            - name: AKKA_CLUSTER_BOOTSTRAP_SERVICE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: "metadata.labels['app']"
+          envFrom:
+            - configMapRef:
+                name: global-config
+            - configMapRef:
+                name: super-soft-steam-master-config
+          ports:
+            - name: remoting
+              containerPort: 2551
+              protocol: TCP
+            - name: api
+              containerPort: 8080
+            - name: management
+              containerPort: 8558
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: management
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: management
+          resources:
+            requests:
+              memory: "500M"
+            limits:
+              memory: "1G"
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: super-soft-steam-worker
+    cluster: super-soft-steam-cluster
+  name: super-soft-steam-worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: super-soft-steam-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: super-soft-steam-worker
+        cluster: super-soft-steam-cluster
+        actorSystemName: super-soft-steam-cluster
+      annotations:
+        synerise.com/deployment.date: "$DEPLOYMENT_DATE"
+        synerise.com/deployment.author: "$USERNAME"
+        synerise.com/deployment.stevedore-branch: "$STEVE_BRANCH"
+        synerise.com/deployment.app-version: "$IMAGE_TAG"
+        synerise.com/deployment.canonical-name: "$APPLICATION"
+        synerise.com/deployment.singleton: "false"
+        synerise.com/deployment.on-prem: "false"
+    spec:
+      imagePullSecrets:
+        - name: synerise-deployer-pull-secret
+      serviceAccountName: super-soft-steam-cluster
+      containers:
+        - name: super-soft-steam-worker
+          image: $DOCKER_REGISTRY/synerise/super-soft-steam-worker:$IMAGE_TAG
+          imagePullPolicy: Always
+          env:
+            - name: AKKA_CLUSTER_BOOTSTRAP_SERVICE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: "metadata.labels['app']"
+          envFrom:
+            - configMapRef:
+                name: global-config
+            - configMapRef:
+                name: super-soft-steam-worker-config
+          ports:
+            - name: remoting
+              containerPort: 2551
+              protocol: TCP
+            - name: api
+              containerPort: 8080
+            - name: management
+              containerPort: 8558
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: management
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: management
+          resources:
+            requests:
+              memory: "500M"
+            limits:
+              memory: "1G"
